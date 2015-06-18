@@ -1,0 +1,17 @@
+<resources>
+    <string name="app_name">Puzzle Practice</string>
+
+    <string name="time">Time:</string>
+    <string name="select_image">Select Image</string>
+    <string name="feedback"><![CDATA[<a href="http://goo.gl/forms/BxaJfuKZ6E">Notice a problem? Report it!</a>]]></string>
+    <string name="banner_ad_unit_id"></string>
+
+    <string name="item_ads">Disable Ads</string>
+    <string name="item_reset">Reset</string>
+    <string name="item_new_image">New Image</string>
+    <string name="item_ctw">Change The World</string>
+    <string name="item_ctw_short">CTW</string>
+
+    <string name="wait">Please Wait.</string>
+    <string name="processing">Processing Image&#8230;</string>
+</resources>
