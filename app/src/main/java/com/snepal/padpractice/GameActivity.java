@@ -1,7 +1,9 @@
 package com.snepal.padpractice;
 
+import android.app.AlertDialog;
 import android.app.ProgressDialog;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Bitmap;
@@ -12,6 +14,7 @@ import android.graphics.Point;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.CountDownTimer;
+import android.os.Vibrator;
 import android.support.v7.app.ActionBarActivity;
 import android.os.Bundle;
 import android.text.Html;
@@ -40,7 +43,7 @@ import java.util.List;
 
 
 public class GameActivity extends ActionBarActivity {
-    private static final int DEFAULT_TIME = 5;
+    private static final int DEFAULT_TIME = 4;
     private static final int CTW_TIME = 10;
     private static final int ROWS = 5;
     private static final int COLS = 6;
@@ -55,7 +58,7 @@ public class GameActivity extends ActionBarActivity {
 
     // Board related stuff
     private BoardView boardView;
-    private Piece[][] pieces = new Piece[ROWS][COLS];
+    private Piece[][] pieces;
     private int windowHeight;
     private int boxSize;
     private int maxRadius;
@@ -66,6 +69,8 @@ public class GameActivity extends ActionBarActivity {
     private boolean CTWEnabled = false;
     private boolean hasPickedUp = false;
 
+    private Vibrator vibrator;
+    private boolean shouldVibrate;
 
     private SharedPreferences sharedPreferences;
 
@@ -76,13 +81,11 @@ public class GameActivity extends ActionBarActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_game);
         sharedPreferences = getPreferences(Context.MODE_PRIVATE);
+
+        shouldVibrate = sharedPreferences.getBoolean("vibrate", false);
+        vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
+
         Uri image = Uri.parse(getIntent().getStringExtra("uri"));
-        InputStream imageStream = null;
-        try {
-            imageStream = getContentResolver().openInputStream(image);
-        } catch (FileNotFoundException ex) {
-            // uhhh
-        }
 
         // Add feedback link
         TextView feedbackText = (TextView) findViewById(R.id.feedbackText);
@@ -93,9 +96,7 @@ public class GameActivity extends ActionBarActivity {
         initBoardView();
         initCountdown();
 
-        // Display progress bar and start processing image
-        progressDialog = ProgressDialog.show(this, getResources().getString(R.string.wait), getResources().getString(R.string.processing), true, false);
-        new GenerateBoardTask().execute(imageStream);
+        startGenerateBoardTask(image);
     }
 
     private void initBoardView() {
@@ -117,7 +118,7 @@ public class GameActivity extends ActionBarActivity {
         boardView.setOnTouchStartedListener(new BoardView.OnTouchStartedListener() {
             @Override
             public void onStart() {
-                if (! CTWEnabled || ! hasPickedUp) {
+                if (!CTWEnabled || !hasPickedUp) {
                     countDownTimer.start();
                 }
             }
@@ -144,9 +145,7 @@ public class GameActivity extends ActionBarActivity {
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 userTime = DEFAULT_TIME + (progress/2d);
                 sharedPreferences.edit().putFloat("user_time", (float) userTime).apply();
-
-                countDownTimer = new MyCountDownTimer((long) (userTime * 1000), 10);
-                countDownView.setText(String.valueOf(userTime));
+                resetCountdown();
             }
 
             @Override
@@ -161,6 +160,9 @@ public class GameActivity extends ActionBarActivity {
         });
         // Progress bar shows remaining time when moving orbs
         progressBar = (ProgressBar) findViewById(R.id.progressBar);
+        progressBar.setMax((int) (userTime * 1000));
+        progressBar.setProgress((int) (userTime * 1000));
+
         countDownView = (TextView) findViewById(R.id.countDown);
         countDownView.setText(String.valueOf(userTime));
         countDownTimer = new MyCountDownTimer((long) (userTime * 1000), 10);
@@ -200,6 +202,23 @@ public class GameActivity extends ActionBarActivity {
         return bitmap;
     }
 
+    private void resetCountdown() {
+        countDownTimer.cancel();
+        if (CTWEnabled) {
+            progressBar.setMax(CTW_TIME * 1000);
+            progressBar.setProgress(CTW_TIME * 1000);
+
+            countDownTimer = new MyCountDownTimer((long) (CTW_TIME * 1000), 10);
+            countDownView.setText(String.valueOf(CTW_TIME));
+        } else {
+            progressBar.setMax((int) (userTime * 1000));
+            progressBar.setProgress((int) (userTime * 1000));
+
+            countDownTimer = new MyCountDownTimer((long) (userTime * 1000), 10);
+            countDownView.setText(String.valueOf(userTime));
+        }
+    }
+
     private void setBoard() {
         Piece[][] copy = new Piece[ROWS][COLS];
         for (int i = 0; i < ROWS; i++) {
@@ -213,14 +232,41 @@ public class GameActivity extends ActionBarActivity {
         resetCountdown();
     }
 
-    private void resetCountdown() {
-        countDownTimer.cancel();
-        if (CTWEnabled) {
-            countDownTimer = new MyCountDownTimer((long) (CTW_TIME * 1000), 10);
-            countDownView.setText(String.valueOf(CTW_TIME));
+    private void showInvalidFileDialog() {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle(getResources().getString(R.string.invalid_file_title))
+                .setMessage(getResources().getString(R.string.invalid_file_msg))
+                .setPositiveButton(getResources().getString(R.string.ok), new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        Intent i = new Intent(Intent.ACTION_PICK, android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
+                        startActivityForResult(i, 1);
+                        dialog.dismiss();
+                    }
+                });
+        builder.show();
+    }
+
+    private void startGenerateBoardTask(Uri uri) {
+        InputStream imageStream = null;
+        try {
+            imageStream = getContentResolver().openInputStream(uri);
+        } catch (FileNotFoundException ex) {
+            // TODO Show file not found dialog
+        }
+        if (progressDialog == null) {
+            progressDialog = ProgressDialog.show(this, getResources().getString(R.string.wait), getResources().getString(R.string.processing), true, false);
         } else {
-            countDownTimer = new MyCountDownTimer((long) (userTime * 1000), 10);
-            countDownView.setText(String.valueOf(userTime));
+            progressDialog.show();
+        }
+        Bitmap bitmap = BitmapFactory.decodeStream(imageStream);
+        if (boardWidth > bitmap.getWidth() || (windowHeight - boardWidth) > bitmap.getHeight()) {
+            showInvalidFileDialog();
+        } else {
+            // Make the image to find orbs in a bit larger than the board since sometimes there is
+            // weird padding on the bottom
+            bitmap = Bitmap.createBitmap(bitmap, 0, windowHeight - boardWidth, boardWidth, boardWidth);
+            new GenerateBoardTask().execute(bitmap);
         }
     }
 
@@ -228,6 +274,7 @@ public class GameActivity extends ActionBarActivity {
     public boolean onCreateOptionsMenu(Menu menu) {
         // Inflate the menu; this adds items to the action bar if it is present.
         getMenuInflater().inflate(R.menu.menu_game, menu);
+        menu.getItem(3).setChecked(shouldVibrate);
         return true;
     }
 
@@ -249,6 +296,11 @@ public class GameActivity extends ActionBarActivity {
                 Intent i = new Intent(Intent.ACTION_PICK, android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
                 startActivityForResult(i, 1);
                 return true;
+            case R.id.action_notify:
+                shouldVibrate = ! item.isChecked();
+                sharedPreferences.edit().putBoolean("vibrate", shouldVibrate).apply();
+                item.setChecked(shouldVibrate);
+                return true;
             case R.id.action_ctw:
                 CTWEnabled = ! item.isChecked();
                 item.setChecked(CTWEnabled);
@@ -265,14 +317,7 @@ public class GameActivity extends ActionBarActivity {
         super.onActivityResult(requestCode, resultCode, data);
         if(resultCode == RESULT_OK){
             Uri image = data.getData();
-            InputStream imageStream = null;
-            try {
-                imageStream = getContentResolver().openInputStream(image);
-            } catch (FileNotFoundException ex) {
-                // uhhh
-            }
-            progressDialog.show();
-            new GenerateBoardTask().execute(imageStream);
+            startGenerateBoardTask(image);
         }
     }
 
@@ -294,20 +339,20 @@ public class GameActivity extends ActionBarActivity {
             countDownView.setText("0.00");
             boardView.stopMovement();
             hasPickedUp = false;
+            if (shouldVibrate) {
+                vibrator.vibrate(400);
+
+            }
         }
     }
 
-    private class GenerateBoardTask extends AsyncTask<InputStream, Void, Void> {
+    private class GenerateBoardTask extends AsyncTask<Bitmap, Void, Void> {
         @Override
-        protected Void doInBackground(InputStream... params) {
-            pieces = new Piece[5][6];
-            Bitmap bitmap= BitmapFactory.decodeStream(params[0]);
-            // Make the image to find orbs in a bit larger than the board since sometimes there is
-            // weird padding on the bottom
-            bitmap = Bitmap.createBitmap(bitmap, 0, windowHeight - boardWidth, boardWidth, boardWidth);
+        protected Void doInBackground(Bitmap... params) {
+            pieces = new Piece[ROWS][COLS];
+            Bitmap bitmap = params[0];
             Mat original = new Mat();
             Mat source = new Mat();
-            Mat out = new Mat();
             Utils.bitmapToMat(bitmap, original);
             Imgproc.cvtColor(original, source, Imgproc.COLOR_BGR2GRAY);
             Imgproc.GaussianBlur(source, source, new Size(9, 9), 2, 2);

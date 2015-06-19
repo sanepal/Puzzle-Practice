@@ -11,7 +11,13 @@
     <string name="item_new_image">New Image</string>
     <string name="item_ctw">Change The World</string>
     <string name="item_ctw_short">CTW</string>
+    <string name="item_notify">Vibrate when timer ends.</string>
 
     <string name="wait">Please Wait.</string>
     <string name="processing">Processing Image&#8230;</string>
+
+    <string name="invalid_file_title">Invalid File.</string>
+    <string name="invalid_file_msg">Please select a screenshot taken with this device.</string>
+
+    <string name="ok">Okay</string>
 </resources>

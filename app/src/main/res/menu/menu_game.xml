@@ -24,5 +24,10 @@
         android:orderInCategory="300"
         app:showAsAction="never"/>
 
+    <item android:id="@+id/action_notify"
+        android:title="@string/item_notify"
+        android:checkable="true"
+        android:orderInCategory="400"
+        app:showAsAction="never"/>
 
 </menu>
